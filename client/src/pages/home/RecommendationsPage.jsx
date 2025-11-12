@@ -57,10 +57,37 @@ const RecommendationsPage = () => {
     const MIN_LOADING_TIME = 2000; // ms
     const start = Date.now();
     try {
-  const protectedUrl = `${tokenManager.getBaseUrl()}/recommend?emotion=${selectedEmotion}`;
-  const response = await fetch(protectedUrl, { headers: { 'Authorization': `Bearer ${jwt}` } });
+      const base = tokenManager.getBaseUrl();
+      const protectedUrl = `${base}/recommend?emotion=${selectedEmotion}`;
+      const headers = { 'Authorization': `Bearer ${jwt}` };
+
+      // Debugging info: show environment, constructed URLs and headers
+      console.debug('[Recommendations] Debug info ->', {
+        pageLocation: window.location.href,
+        hostname: window.location.hostname,
+        navigatorOnLine: typeof navigator !== 'undefined' ? navigator.onLine : 'unknown',
+        base,
+        protectedUrl,
+        headers
+      });
+
+      const response = await fetch(protectedUrl, { headers });
+      console.debug('[Recommendations] Fetch completed ->', {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        responseUrl: response.url
+      });
 
       if (!response.ok) {
+        // Try to capture response body for debugging
+        let bodyText = null;
+        try {
+          bodyText = await response.clone().text();
+        } catch (e) {
+          bodyText = '<unreadable response body>';
+        }
+        console.warn('[Recommendations] Non-OK response body:', { status: response.status, bodyText });
         if (response.status === 401) {
           localStorage.removeItem('spotify_jwt');
           if (!hasShownFlashRef.current) {
