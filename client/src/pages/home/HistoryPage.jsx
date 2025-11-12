@@ -1,51 +1,95 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from '../../components/sidebar/Sidebar';
 import GlassCard from '../../components/layout/GlassCard';
 import './HistoryPage.css';
+import { getUserHistory } from '../../utils/analyticsApi';
 
 const HistoryPage = () => {
   const [analyses, setAnalyses] = useState([]);
   const [filteredAnalyses, setFilteredAnalyses] = useState([]);
   const [selectedEmotion, setSelectedEmotion] = useState('all');
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    // TODO: Obtener historial real del backend
-    // Por ahora usamos datos mockup
-    const mockData = generateMockHistory();
-    setAnalyses(mockData);
-    setFilteredAnalyses(mockData);
-    setLoading(false);
+    const loadHistory = async () => {
+      setLoading(true);
+      try {
+        const response = await getUserHistory();
+        const historyData = response.analyses.map(analysis => {
+          const recs = analysis.recommendations || [];
+          // Support multiple shapes: array of tracks, or object with 'tracks' key, or object with 'total_tracks'
+          let tracksCount = 0;
+          if (Array.isArray(recs)) {
+            tracksCount = recs.length;
+          } else if (recs && typeof recs === 'object') {
+            if (Array.isArray(recs.tracks)) tracksCount = recs.tracks.length;
+            else if (typeof recs.total_tracks === 'number') tracksCount = recs.total_tracks;
+          }
+
+          return {
+            id: analysis.id,
+            emotion: analysis.emotion,
+            confidence: analysis.confidence,
+            date: analysis.date,
+            emotions_detected: analysis.emotions_detected,
+            recommendations: Array.isArray(recs) ? recs : (recs.tracks || []),
+            tracksCount
+          };
+        });
+
+        setAnalyses(historyData);
+        setFilteredAnalyses(historyData);
+      } catch (error) {
+        console.error('Error loading history:', error);
+        setAnalyses([]);
+        setFilteredAnalyses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadHistory();
   }, []);
 
   useEffect(() => {
-    if (selectedEmotion === 'all') {
-      setFilteredAnalyses(analyses);
-    } else {
-      setFilteredAnalyses(analyses.filter(a => a.emotion === selectedEmotion));
-    }
+    const filterAnalyses = async () => {
+      if (selectedEmotion === 'all') {
+        setFilteredAnalyses(analyses);
+      } else {
+        try {
+          const response = await getUserHistory(selectedEmotion);
+          const filteredData = response.analyses.map(analysis => {
+            const recs = analysis.recommendations || [];
+            let tracksCount = 0;
+            if (Array.isArray(recs)) tracksCount = recs.length;
+            else if (recs && typeof recs === 'object') {
+              if (Array.isArray(recs.tracks)) tracksCount = recs.tracks.length;
+              else if (typeof recs.total_tracks === 'number') tracksCount = recs.total_tracks;
+            }
+
+            return {
+              id: analysis.id,
+              emotion: analysis.emotion,
+              confidence: analysis.confidence,
+              date: analysis.date,
+              emotions_detected: analysis.emotions_detected,
+              recommendations: Array.isArray(recs) ? recs : (recs.tracks || []),
+              tracksCount
+            };
+          });
+          setFilteredAnalyses(filteredData);
+        } catch (error) {
+          console.error('Error filtering history:', error);
+          setFilteredAnalyses([]);
+        }
+      }
+    };
+
+    filterAnalyses();
   }, [selectedEmotion, analyses]);
 
-  const generateMockHistory = () => {
-    const emotions = ['happy', 'sad', 'angry', 'relaxed', 'energetic'];
-    const history = [];
-    
-    for (let i = 0; i < 12; i++) {
-      const emotion = emotions[Math.floor(Math.random() * emotions.length)];
-      const date = new Date();
-      date.setDate(date.getDate() - i * 2);
-      
-      history.push({
-        id: i + 1,
-        emotion: emotion,
-        confidence: 0.75 + Math.random() * 0.2,
-        date: date.toISOString(),
-        tracksCount: Math.floor(Math.random() * 10) + 5
-      });
-    }
-    
-    return history;
-  };
 
   const getEmotionColor = (emotion) => {
     const colors = {
@@ -80,21 +124,43 @@ const HistoryPage = () => {
     return labels[emotion] || emotion;
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  const getTrackPreview = (analysis) => {
+    const recs = analysis.recommendations || [];
+    if (!recs || recs.length === 0) return 'Sin canciones';
+    const first = recs[0];
+    // first may be an object with name and artists (array of {name})
+    const name = first.name || first.title || first.track?.name || '';
+    let artists = [];
+    if (Array.isArray(first.artists)) {
+      artists = first.artists.map(a => a.name).filter(Boolean);
+    } else if (first.track && Array.isArray(first.track.artists)) {
+      artists = first.track.artists.map(a => a.name).filter(Boolean);
+    }
+    const artistStr = artists.join(', ');
+    if (name && artistStr) return `${name} — ${artistStr}`;
+    if (name) return name;
+    return 'Recomendación disponible';
+  };
 
-    if (diffDays === 0) return 'Hoy';
-    if (diffDays === 1) return 'Ayer';
-    if (diffDays < 7) return `Hace ${diffDays} días`;
-    
-    return date.toLocaleDateString('es-ES', { 
-      day: 'numeric', 
-      month: 'short', 
-      year: 'numeric' 
-    });
+  const formatDate = (dateString) => {
+    // Mostrar fecha y hora localizada (sin textos relativos)
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    try {
+      return date.toLocaleString('es-ES', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return date.toLocaleDateString();
+    }
+  };
+
+  const handleViewDetails = (analysisId) => {
+    navigate(`/home/analysis/${analysisId}`);
   };
 
   const emotionFilters = [
@@ -210,13 +276,14 @@ const HistoryPage = () => {
                           <circle cx="6" cy="18" r="3"></circle>
                           <circle cx="18" cy="16" r="3"></circle>
                         </svg>
-                        <span>{analysis.tracksCount} canciones</span>
+                        <span className="track-preview">{getTrackPreview(analysis)}</span>
                       </div>
                     </div>
                   </div>
 
                   <button 
                     className="view-details-btn"
+                    onClick={() => handleViewDetails(analysis.id)}
                     style={{
                       background: `linear-gradient(135deg, ${colors.primary} 0%, ${colors.primary}CC 100%)`,
                       borderColor: colors.border

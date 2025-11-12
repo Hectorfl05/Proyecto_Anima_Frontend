@@ -1,20 +1,91 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import tokenManager from '../utils/tokenManager';
 
 /**
- * Simple route guard that checks for an `access_token` in localStorage.
- * If not present, redirect to /signin; otherwise render the children.
+ * Enhanced route guard with proper token validation
  */
 export default function RequireAuth({ children }) {
-  const token = localStorage.getItem('access_token');
   const location = useLocation();
+  const [isChecking, setIsChecking] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  console.log('RequireAuth - Token found:', token); // Para debugging
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        // Special case: If we're in the middle of a Spotify OAuth callback,
+        // be more lenient with auth validation to prevent redirect loops
+        const urlParams = new URLSearchParams(window.location.search);
+  // Support both legacy nested route and the new public callback route
+  const isSpotifyCallbackRoute = location.pathname === '/home/spotify-callback' || location.pathname === '/spotify-callback';
+        const isSpotifyCallback = isSpotifyCallbackRoute && urlParams.has('state');
+        
+        // For Spotify callbacks, always allow through - don't check tokens
+        if (isSpotifyCallback) {
+          console.log('🎵 Spotify callback detected, allowing through without auth check');
+          setIsAuthenticated(true);
+          setIsChecking(false);
+          return;
+        }
+        
+        // Check if user has valid token
+        const authenticated = tokenManager.isAuthenticated();
+        
+        if (authenticated) {
+          
+          // Optionally verify token with backend
+          try {
+            await tokenManager.getValidAccessToken();
+            setIsAuthenticated(true);
+          } catch (error) {
+            console.error('Token validation failed:', error);
+            setIsAuthenticated(false);
+          }
+        } else {
+          setIsAuthenticated(false);
+        }
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        setIsAuthenticated(false);
+      } finally {
+        setIsChecking(false);
+      }
+    };
 
-  if (!token) {
-    // Redirect to sign-in, preserve current location in state so we can return after login
+    checkAuth();
+  }, [location]);
+
+  // Show loading state while checking authentication
+  if (isChecking) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        minHeight: '100vh',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <div style={{
+          width: '50px',
+          height: '50px',
+          border: '4px solid rgba(195, 196, 250, 0.3)',
+          borderTopColor: '#a1a2e6',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{ color: '#4a5568', fontWeight: 500 }}>Verificando autenticación...</p>
+      </div>
+    );
+  }
+
+  // Redirect to sign-in if not authenticated
+  if (!isAuthenticated) {
+    console.log('❌ Not authenticated, redirecting to /signin');
     return <Navigate to="/signin" state={{ from: location }} replace />;
   }
 
+  // User is authenticated, render protected content
+  console.log('✅ Authenticated, rendering protected content');
   return children;
 }

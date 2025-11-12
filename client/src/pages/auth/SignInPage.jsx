@@ -1,12 +1,13 @@
 import React, { useEffect } from 'react';
 import GlassCard from '../../components/layout/GlassCard';
 import Navbar from '../../components/navbar';
+import PublicSidebar from '../../components/sidebar/PublicSidebar';
 import SignInForm from '../../components/auth/SignInForm';
 import './AuthPage.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useFlash } from '../../components/flash/FlashContext';
 import { useApi } from '../../hooks/useApi';
-import { loginApi } from '../../utils/api';
+import { loginApi } from '../../utils/enhancedApi';
 
 const SignInPage = () => {
   const navigate = useNavigate();
@@ -40,37 +41,27 @@ const SignInPage = () => {
 
   const handleSignIn = async (formData) => {
     try {
-      const data = await callApi(() => loginApi(formData));
-      
-      // 🆕 Guardar el token de acceso
-      localStorage.setItem('access_token', data.access_token);
+      // loginApi now automatically stores tokens using tokenManager
+      await callApi(() => loginApi(formData));
 
       if (flash?.show) {
         flash.show(`¡Bienvenido de vuelta!`, 'success', 3000);
       }
 
       const returnTo = location?.state?.from?.pathname || '/home';
-      setTimeout(() => {
-        navigate(returnTo);
-      }, 1000);
+      // Navigate immediately after successful login to reduce perceived latency
+      navigate(returnTo);
       
     } catch (err) {
       console.error('Sign in error:', err);
-      
-      let errorMessage = err.message;
-      if (err.message.includes('Failed to fetch')) {
-        errorMessage = 'No se puede conectar con el servidor. Por favor, intenta más tarde.';
-      } else if (err.message.includes('401')) {
-        errorMessage = 'Usuario o contraseña incorrectos';
-      } else if (err.message.includes('500')) {
-        errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
-      }
+      // Error is already handled by useApi hook
     }
   };
 
   return (
     <div className="auth-page gradient-bg">
       <Navbar />
+      <PublicSidebar />
       <div className="auth-page-content">
         <div className="auth-container">
           <GlassCard variant="lilac" style={{ padding: '0' }}>

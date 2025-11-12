@@ -4,10 +4,19 @@ import Button from './Button';
 import { LOGO_SRC } from '../constants/assets';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useFlash } from './flash/FlashContext'; // Importar useFlash
+import { useTheme } from '../contexts/ThemeContext';
+import tokenManager from '../utils/tokenManager';
 
 function Navbar() {
   const [open, setOpen] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Initialize auth state immediately from localStorage to prevent flash
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const token = tokenManager.getAccessToken();
+    const isExpired = tokenManager.isTokenExpired();
+    // Only consider authenticated if token exists AND is not expired
+    return !!(token && !isExpired);
+  });
+  const { isDarkMode, toggleTheme } = useTheme();
 
   const toggle = () => setOpen((s) => !s);
 
@@ -17,24 +26,49 @@ function Navbar() {
 
   // Verificar autenticación basada en el token
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    setIsAuthenticated(!!token);
+    const checkAuth = async () => {
+      // If we're processing Spotify callback, don't interfere with auth state
+      if (location.pathname === '/spotify-callback') {
+        return;
+      }
+
+      const token = tokenManager.getAccessToken();
+      const isExpired = tokenManager.isTokenExpired();
+
+      // If token exists but is expired, try to refresh before clearing
+      if (token && isExpired) {
+        try {
+          console.log('⚠️ Token expired or expiring soon, attempting refresh from navbar...');
+          await tokenManager.refreshAccessToken();
+          setIsAuthenticated(true);
+          return;
+        } catch (e) {
+          console.warn('🔒 Token refresh failed in navbar:', e?.message || e);
+          // Token manager may have already cleared tokens on specific errors
+          setIsAuthenticated(false);
+          return;
+        }
+      }
+
+      setIsAuthenticated(!!token && !isExpired);
+    };
+
+    // Initial check
+    checkAuth();
     
     // Escuchar cambios en el localStorage (por si se cierra sesión en otra pestaña)
     const handleStorageChange = () => {
-      const newToken = localStorage.getItem('access_token');
-      setIsAuthenticated(!!newToken);
+      checkAuth();
     };
 
     window.addEventListener('storage', handleStorageChange);
     return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
-  const isAuthenticatedArea = location && location.pathname && location.pathname.startsWith('/home');
+  }, [location.pathname]);
 
   const handleLogoff = () => {
-    // remove token and redirect to signin
-    localStorage.removeItem('access_token');
+    // Clear all tokens using tokenManager
+    // Preserve the user's connected Spotify token so they don't need to reconnect on next login
+    tokenManager.clearAllTokens(true);
     setIsAuthenticated(false);
     navigate('/', { 
       state: { 
@@ -129,12 +163,53 @@ function Navbar() {
             {isAuthenticated ? (
               <>
                 <li><Button to="/home/account" className="account">Perfil</Button></li>
+                <li>
+                  <button 
+                    className="btn theme-toggle-btn"
+                    onClick={toggleTheme}
+                    aria-label={isDarkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                    title={isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}
+                    role="switch"
+                    aria-checked={isDarkMode}
+                  >
+                    {isDarkMode ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4"/>
+                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                      </svg>
+                    )}
+                  </button>
+                </li>
                 <li><button className="btn logoff" onClick={handleLogoff}>Cerrar sesión</button></li>
               </>
             ) : (
               <>
                 <li><Button to="/signin" className="signin">Iniciar Sesión</Button></li>
                 <li><Button to="/signup" className="signup">Registrarse</Button></li>
+                <li>
+                  <button 
+                    className="btn theme-toggle-btn"
+                    onClick={toggleTheme}
+                    aria-label={isDarkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                    role="switch"
+                    aria-checked={isDarkMode}
+                  >
+                    {isDarkMode ? (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4"/>
+                        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                      </svg>
+                    )}
+                  </button>
+                </li>
               </>
             )}
           </ul>
@@ -167,12 +242,60 @@ function Navbar() {
           {isAuthenticated ? (
             <>
               <Button to="/home/account" className="account" onClick={() => setOpen(false)}>Perfil</Button>
+              <button 
+                className="btn theme-toggle-mobile"
+                onClick={() => { toggleTheme(); setOpen(false); }}
+                aria-label={isDarkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                role="switch"
+                aria-checked={isDarkMode}
+              >
+                {isDarkMode ? (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '18px', height: '18px', marginRight: '8px'}}>
+                      <circle cx="12" cy="12" r="4"/>
+                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                    </svg>
+                    Modo Claro
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '18px', height: '18px', marginRight: '8px'}}>
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                    Modo Oscuro
+                  </>
+                )}
+              </button>
               <button className="btn logoff" onClick={() => { setOpen(false); handleLogoff(); }}>Cerrar sesión</button>
             </>
           ) : (
             <>
               <Button to="/signin" className="signin" onClick={() => setOpen(false)}>Iniciar Sesión</Button>
               <Button to="/signup" className="signup" onClick={() => setOpen(false)}>Registrarse</Button>
+              <button 
+                className="btn theme-toggle-mobile"
+                onClick={() => { toggleTheme(); setOpen(false); }}
+                aria-label={isDarkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                role="switch"
+                aria-checked={isDarkMode}
+              >
+                {isDarkMode ? (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '18px', height: '18px', marginRight: '8px'}}>
+                      <circle cx="12" cy="12" r="4"/>
+                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                    </svg>
+                    Modo Claro
+                  </>
+                ) : (
+                  <>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{width: '18px', height: '18px', marginRight: '8px'}}>
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                    Modo Oscuro
+                  </>
+                )}
+              </button>
             </>
           )}
         </div>

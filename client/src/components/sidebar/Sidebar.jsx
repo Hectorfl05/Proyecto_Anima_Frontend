@@ -1,26 +1,33 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useCurrentUser } from '../../hooks/useAuth';
+import { logoutApi } from '../../utils/enhancedApi';
+import { useTheme } from '../../contexts/ThemeContext';
 import './Sidebar.css';
 
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { isDarkMode, toggleTheme } = useTheme();
   
   // Obtener el usuario autenticado actual
-  const { user, loading: userLoading, error: userError } = useCurrentUser();
+  const { user } = useCurrentUser();
   
   // Mostrar el nombre del usuario o un placeholder mientras carga
   const displayName = user?.nombre || 'Usuario';
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
-  const handleLogout = () => {
-    // Limpiar localStorage y redirigir al login
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user_name'); // Por si acaso también existe esto
-    navigate('/signin');
+  const handleLogout = async () => {
+    try {
+      await logoutApi();
+      navigate('/signin');
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Navigate anyway even if API call fails
+      navigate('/signin');
+    }
   };
 
   const menuItems = [
@@ -133,6 +140,34 @@ const Sidebar = () => {
 
         {/* Footer - Cerrar sesión */}
         <div className="sidebar-footer">
+          {/* Theme Toggle */}
+          <button 
+            className="sidebar-item glass theme-toggle"
+            onClick={toggleTheme}
+            style={{ marginBottom: '1rem' }}
+            aria-label={isDarkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            title={isDarkMode ? 'Activar modo claro' : 'Activar modo oscuro'}
+            role="switch"
+            aria-checked={isDarkMode}
+          >
+            <span className="sidebar-icon" aria-hidden="true">
+              {isDarkMode ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="4"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+              )}
+            </span>
+            <span className="sidebar-label">
+              {isDarkMode ? 'Modo Claro' : 'Modo Oscuro'}
+            </span>
+          </button>
+
+          {/* Logout Button */}
           <button className="sidebar-logout glass" onClick={handleLogout}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>

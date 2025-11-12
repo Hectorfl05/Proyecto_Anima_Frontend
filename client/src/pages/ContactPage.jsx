@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import Navbar from '../components/navbar';
+import PublicSidebar from '../components/sidebar/PublicSidebar';
 import GlassCard from '../components/layout/GlassCard';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { useFlash } from '../components/flash/FlashContext';
+import tokenManager from '../utils/tokenManager';
 import './ContactPage.css';
 
 function ContactPage() {
@@ -73,7 +75,7 @@ function ContactPage() {
     setLoading(true);
     
     try {
-      const response = await fetch('http://127.0.0.1:8000/v1/contact/send', {
+      const response = await fetch(`${tokenManager.getBaseUrl()}/v1/contact/send`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,6 +115,7 @@ function ContactPage() {
   return (
     <div className="contact-page gradient-bg">
       <Navbar />
+      <PublicSidebar />
       
       <div className="contact-content">
         <div className="contact-hero">

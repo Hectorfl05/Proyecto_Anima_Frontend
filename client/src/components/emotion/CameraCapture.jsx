@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import GlassCard from '../layout/GlassCard';
 import './CameraCapture.css';
 
@@ -10,39 +10,21 @@ const CameraCapture = ({ onCapture, onCancel }) => {
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  // Keep a ref to the stream so callbacks don't need to depend on 'stream'
+  const streamRef = useRef(null);
 
   // Iniciar cámara al montar
-  useEffect(() => {
-    startCamera();
-    return () => {
-      stopCamera();
-    };
-  }, []);
-
-  // 🔧 CORRECCIÓN: Actualizar videoRef cuando el stream cambia
-  useEffect(() => {
-    if (stream && videoRef.current && !capturedPhoto) {
-      videoRef.current.srcObject = stream;
-      // Asegurar que el video se reproduzca
-      videoRef.current.play().catch(err => {
-        console.error('Error playing video:', err);
-      });
-    } else if (capturedPhoto && videoRef.current) {
-      // Asegurar que el video se detenga completamente cuando hay foto capturada
-      videoRef.current.srcObject = null;
-    }
-  }, [stream, capturedPhoto]);
-
-  const startCamera = async () => {
+  const startCamera = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Detener stream anterior si existe
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+
+      // Detener stream anterior si existe (usar streamRef para evitar dependencias)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
-      
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'user',
@@ -51,33 +33,76 @@ const CameraCapture = ({ onCapture, onCancel }) => {
         },
         audio: false
       });
-      
+
       console.log('✅ Cámara iniciada correctamente');
       setStream(mediaStream);
+      streamRef.current = mediaStream;
       setIsLoading(false);
     } catch (err) {
       console.error('❌ Error accessing camera:', err);
       setError('No se pudo acceder a la cámara. Por favor, verifica los permisos.');
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const stopCamera = () => {
-    console.log('🛑 Deteniendo cámara');
-    
-    if (stream) {
-      stream.getTracks().forEach(track => {
-        track.stop();
+  const stopCamera = useCallback(() => {
+    console.log('🛑 Deteniendo cámara inmediatamente');
+
+    const current = streamRef.current;
+    if (current) {
+      current.getTracks().forEach(track => {
+        try { track.stop(); } catch (e) { /* ignore */ }
         console.log(`Track detenido: ${track.kind}`);
       });
-      setStream(null);
+      streamRef.current = null;
     }
-    
+
+    // Also clear state to keep UI consistent
+    setStream(null);
+
     if (videoRef.current) {
-      videoRef.current.srcObject = null;
-      videoRef.current.pause();
+      try {
+        videoRef.current.srcObject = null;
+        videoRef.current.pause();
+        videoRef.current.load(); // Forzar la liberación del recurso
+      } catch (e) {
+        // ignore
+      }
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Start camera on mount
+    startCamera();
+    return () => {
+      // Ensure camera is stopped on unmount
+      stopCamera();
+    };
+    // startCamera/stopCamera are stable (empty deps)
+  }, [startCamera, stopCamera]);
+
+  // 🔧 CORRECCIÓN: Actualizar videoRef cuando el stream cambia
+  useEffect(() => {
+    if (stream && videoRef.current && !capturedPhoto) {
+      videoRef.current.srcObject = stream;
+      // Asegurar que el video se reproduzca
+      try {
+        const playResult = videoRef.current.play && videoRef.current.play();
+        if (playResult && typeof playResult.catch === 'function') {
+          playResult.catch(err => {
+            console.error('Error playing video:', err);
+          });
+        }
+      } catch (err) {
+        console.error('Error calling play on video element:', err);
+      }
+    } else if (capturedPhoto && videoRef.current) {
+      // Asegurar que el video se detenga completamente cuando hay foto capturada
+      videoRef.current.srcObject = null;
+    }
+  }, [stream, capturedPhoto]);
+
+  
 
   const capturePhoto = () => {
     if (!videoRef.current || !canvasRef.current) {
@@ -127,7 +152,10 @@ const CameraCapture = ({ onCapture, onCancel }) => {
 
   const confirmPhoto = () => {
     if (capturedPhoto) {
-      console.log('✅ Foto confirmada');
+      console.log('✅ Foto confirmada - Deteniendo cámara inmediatamente');
+      // Detener la cámara ANTES de llamar al callback
+      stopCamera();
+      // Llamar al callback después de detener
       onCapture(capturedPhoto);
     }
   };
