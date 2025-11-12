@@ -58,9 +58,9 @@ const RecommendationsPage = () => {
     const start = Date.now();
       try {
         // Use HTTP for local dev, force HTTPS for the remote production host
-        const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.');
-        const API_HOST = isLocal ? 'http://127.0.0.1:8000' : 'https://proyectoanimabackend-production.up.railway.app';
-        const protectedUrl = `${API_HOST}/recommend?emotion=${selectedEmotion}`;
+        //const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.');
+        //const API_HOST = isLocal ? 'http://127.0.0.1:8000' : 'https://proyectoanimabackend-production.up.railway.app';
+        const protectedUrl = `https://proyectoanimabackend-production.up.railway.app/recommend?emotion=${selectedEmotion}`;
         const response = await fetch(protectedUrl, { headers: { 'Authorization': `Bearer ${jwt}` } });
 
       if (!response.ok) {
