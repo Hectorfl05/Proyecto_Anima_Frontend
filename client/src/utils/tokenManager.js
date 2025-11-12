@@ -23,9 +23,32 @@ class TokenManager {
   }
 
   getBaseUrl() {
-    // Hardcoded production backend URL per request
-    // NOTE: this intentionally ignores environment variables and always
-    // returns the production backend address hosted on Railway.
+    // Prefer an explicit environment override (REACT_APP_API_URL).
+    // Normalize the value: if it already contains a scheme use it; otherwise
+    // prepend https for remote hosts and http for localhost.
+    try {
+      const env = (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) ? process.env.REACT_APP_API_URL.trim() : '';
+      if (env) {
+        // remove trailing slash
+        const cleaned = env.replace(/\/+$/, '');
+        if (/^https?:\/\//i.test(cleaned)) return cleaned;
+        // if it's a localhost/127 host, default to http for local dev
+        if (/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(cleaned)) {
+          return `http://${cleaned}`;
+        }
+        // otherwise assume https for remote hosts
+        return `https://${cleaned}`;
+      }
+    } catch (e) {
+      // ignore and fall through to defaults
+    }
+
+    // Fallback to detect runtime host: if the app is running locally use local backend
+    if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.'))) {
+      return 'http://127.0.0.1:8000';
+    }
+
+    // Default to the production backend (HTTPS)
     return 'https://proyectoanimabackend-production.up.railway.app';
   }
 
