@@ -42,7 +42,7 @@ const RecommendationsPage = () => {
   const fetchRecommendations = useCallback(async () => {
     const jwt = localStorage.getItem('spotify_jwt');
     if (!jwt) {
-      // No Spotify token - don't attempt to fetch
+      // No Spotify token -
       setLoading(false);
       if (!hasShownFlashRef.current) {
         hasShownFlashRef.current = true;
