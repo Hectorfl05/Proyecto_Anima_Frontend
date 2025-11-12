@@ -56,9 +56,12 @@ const RecommendationsPage = () => {
     setLoading(true);
     const MIN_LOADING_TIME = 2000; // ms
     const start = Date.now();
-    try {
-  const protectedUrl = `${tokenManager.getBaseUrl()}/recommend?emotion=${selectedEmotion}`;
-  const response = await fetch(protectedUrl, { headers: { 'Authorization': `Bearer ${jwt}` } });
+      try {
+        // Use HTTP for local dev, force HTTPS for the remote production host
+        const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.');
+        const API_HOST = isLocal ? 'http://127.0.0.1:8000' : 'https://proyectoanimabackend-production.up.railway.app';
+        const protectedUrl = `${API_HOST}/recommend?emotion=${selectedEmotion}`;
+        const response = await fetch(protectedUrl, { headers: { 'Authorization': `Bearer ${jwt}` } });
 
       if (!response.ok) {
         if (response.status === 401) {
