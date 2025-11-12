@@ -4,7 +4,7 @@ import Sidebar from '../../components/sidebar/Sidebar';
 import GlassCard from '../../components/layout/GlassCard';
 import './RecommendationsPage.css';
 import { useFlash } from '../../components/flash/FlashContext';
-
+import tokenManager from '../../utils/tokenManager';
 
 // Preload album cover images for tracks
 const preloadImages = async (tracks) => {
@@ -42,7 +42,7 @@ const RecommendationsPage = () => {
   const fetchRecommendations = useCallback(async () => {
     const jwt = localStorage.getItem('spotify_jwt');
     if (!jwt) {
-      // No Spotify token -
+      // No Spotify token - don't attempt to fetch
       setLoading(false);
       if (!hasShownFlashRef.current) {
         hasShownFlashRef.current = true;
@@ -56,12 +56,9 @@ const RecommendationsPage = () => {
     setLoading(true);
     const MIN_LOADING_TIME = 2000; // ms
     const start = Date.now();
-      try {
-        // Use HTTP for local dev, force HTTPS for the remote production host
-        //const isLocal = window.location.hostname === 'localhost' || window.location.hostname.startsWith('127.');
-        //const API_HOST = isLocal ? 'http://127.0.0.1:8000' : 'https://proyectoanimabackend-production.up.railway.app';
-        const protectedUrl = `https://proyectoanimabackend-production.up.railway.app/recommend?emotion=${selectedEmotion}`;
-        const response = await fetch(protectedUrl, { headers: { 'Authorization': `Bearer ${jwt}` } });
+    try {
+  const protectedUrl = `${tokenManager.getBaseUrl()}/recommend?emotion=${selectedEmotion}`;
+  const response = await fetch(protectedUrl, { headers: { 'Authorization': `Bearer ${jwt}` } });
 
       if (!response.ok) {
         if (response.status === 401) {
